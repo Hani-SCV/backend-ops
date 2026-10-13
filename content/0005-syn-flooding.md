@@ -46,9 +46,9 @@ net.ipv4.tcp_syncookies = 1
 
 **한계: TCP 옵션을 잃습니다**
 
-`SYN` 패킷에는 SACK, Window Scale, Timestamp 같은 옵션이 담겨 있습니다. SYN cookie는 `SYN`을 저장하지 않으므로, `ACK`가 돌아왔을 때 이 옵션을 복원할 방법이 없습니다.
+`SYN` 패킷에는 MSS, Window Scale, SACK 같은 옵션이 담겨 있습니다. SYN cookie는 `SYN`을 저장하지 않으므로 `ACK`가 돌아왔을 때 이 옵션을 그대로 복원할 방법이 없습니다. MSS는 쿠키에 몇 비트로 담기 때문에 정해진 몇 가지 값(리눅스는 536, 1300, 1440, 1460) 중 원래 값보다 작거나 같은 가장 큰 값으로 낮춰집니다. **Window Scale과 SACK은 그대로 잃습니다.**
 
-리눅스는 Timestamp 옵션을 이용해 일부를 해결합니다. Timestamp는 한쪽이 보낸 `TSval`을 상대가 `TSecr`로 그대로 돌려주는 구조입니다. 서버가 `SYN-ACK`의 `TSval`에 Window Scale, SACK 정보를 담아 보내면 클라이언트가 `ACK`의 `TSecr`로 그대로 돌려주므로 서버가 옵션을 복원할 수 있습니다.
+리눅스는 Timestamp 옵션을 이용해 이 둘을 되살립니다. Timestamp는 모든 패킷에 실려 오는 옵션이라 잃지 않고, 한쪽이 보낸 `TSval`을 상대가 `TSecr`로 그대로 돌려주는 구조입니다. 서버가 `SYN-ACK`의 `TSval` 하위 6비트에 Window Scale, SACK, ECN 정보를 담아 보내면 클라이언트가 `ACK`의 `TSecr`로 그대로 돌려주므로 서버가 옵션을 복원할 수 있습니다.
 
 ```text
 +--------+--------+-----------+-----------+
@@ -57,10 +57,11 @@ net.ipv4.tcp_syncookies = 1
   1byte    1byte     4byte       4byte
 ```
 
-다만 클라이언트가 Timestamp 옵션을 지원할 때만 가능합니다. 그래서 SYN cookie는 평소가 아니라 **큐가 넘칠 때의 비상 수단**으로 쓰고(`tcp_syncookies = 1`), 그동안 맺은 연결은 일부 옵션 없이 동작할 수 있다는 점을 알아 두어야 합니다. 또한 SYN cookie는 서버의 연결 상태 고갈을 막을 뿐, 회선 대역폭을 가득 채우는 공격까지 막지는 못합니다.
+다만 클라이언트가 Timestamp 옵션을 보낸 경우에만 가능합니다. 그렇지 않은 클라이언트와는 Window Scale과 SACK 없이 연결되어, 지연이 큰 환경에서 처리량이 제한될 수 있습니다. SYN cookie는 이처럼 TCP 규약을 벗어나 확장 기능을 온전히 쓰지 못하는 부작용이 있어서, 리눅스 커널 문서도 정상 부하를 버티는 용도가 아니라 **큐가 넘칠 때만 쓰는 대체 수단**으로 둡니다(`tcp_syncookies = 1`). 또한 SYN cookie는 서버의 연결 상태 고갈을 막을 뿐, 회선 대역폭을 가득 채우는 공격까지 막지는 못합니다.
 
 ## 참고
 
 - [RFC 4987 — TCP SYN Flooding Attacks and Common Mitigations](https://datatracker.ietf.org/doc/html/rfc4987)
 - [Linux Kernel 문서 — IP Sysctl (`tcp_syncookies`)](https://docs.kernel.org/networking/ip-sysctl.html)
 - [D. J. Bernstein — SYN cookies](https://cr.yp.to/syncookies.html)
+- [Linux 소스 — net/ipv4/syncookies.c](https://github.com/torvalds/linux/blob/master/net/ipv4/syncookies.c)
